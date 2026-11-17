@@ -1,8 +1,8 @@
 """
 LLM-friendly text views of numpy arrays.
 
-Everything here is plain numpy and returns strings. The sandbox wraps
-these functions in `show()` and `info()`, which print.
+Everything here is plain numpy and returns strings. The sandbox's `info()`
+prints `summarize_weights`.
 """
 
 from collections.abc import Mapping
@@ -10,59 +10,8 @@ from typing import Any
 
 import numpy as np
 
-# Big enough for a 28x28 MNIST image in one show() call.
-MAX_ROWS = 50
-MAX_COLS = 30
 
-
-# -------------------------------------------------------------------------------- arrays
-
-
-def render_array(
-    name: str,
-    array: np.ndarray,
-    rows: Any = None,
-    cols: Any = None,
-    precision: int = 3,
-) -> str:
-    """
-    Render a 1-D or 2-D array as a table with row and column indices.
-
-    `rows` and `cols` accept anything numpy accepts as an index
-    (an int, a slice, a list of ints). Indices in the table are always the
-    original ones, so a slice of `W["dense.kernel"]` still shows which
-    input and unit each number belongs to.
-    """
-    array = np.asarray(array)
-
-    if array.ndim == 0:
-        return f"{name} = {_format_number(array.item(), precision, signed=True)}"
-
-    if array.ndim > 2:
-        raise ValueError(
-            f"{name} has shape {array.shape}; show() displays 1-D or 2-D arrays. "
-            f"Index it down first, e.g. {name}[..., 0]."
-        )
-
-    is_vector = array.ndim == 1
-    matrix = array.reshape(-1, 1) if is_vector else array
-
-    row_ids = _select(matrix.shape[0], rows, MAX_ROWS)
-    col_ids = [0] if is_vector else _select(matrix.shape[1], cols, MAX_COLS)
-
-    header = f"{name}  shape {array.shape}  showing {_describe(row_ids, matrix.shape[0], 'rows')}"
-    if not is_vector:
-        header += f", {_describe(col_ids, matrix.shape[1], 'cols')}"
-
-    body = render_table(
-        matrix[np.ix_(row_ids, col_ids)],
-        row_labels=row_ids,
-        col_labels=["value"] if is_vector else col_ids,
-        precision=precision,
-        signed=True,
-    )
-
-    return f"{header}\n{body}"
+# -------------------------------------------------------------------------------- tables
 
 
 def render_table(
@@ -70,17 +19,11 @@ def render_table(
     row_labels: list,
     col_labels: list,
     precision: int = 3,
-    signed: bool = False,
 ) -> str:
     """
     Render a 2-D array as right-aligned columns, pandas style.
-
-    `signed` writes an explicit and on positive numbers, which makes
-    weights easier to scan.
     """
-    cells = [
-        [_format_number(value, precision, signed) for value in row] for row in matrix
-    ]
+    cells = [[_format_number(value, precision) for value in row] for row in matrix]
 
     labels = [str(label) for label in row_labels]
     label_width = max(len(label) for label in labels)
@@ -147,26 +90,6 @@ def render_scores(scores: Mapping[str, Any]) -> str:
 # -------------------------------------------------------------------------------- private
 
 
-def _select(length: int, index: Any, limit: int) -> list[int]:
-    """
-    Turn an index into a list of positions, keeping at most `limit`.
-    """
-    positions = np.arange(length)
-    if index is not None:
-        positions = np.atleast_1d(positions[index])
-    return positions[:limit].tolist()
-
-
-def _describe(ids: list[int], total: int, unit: str) -> str:
-    """
-    Say which rows or columns are shown, e.g. "rows 0-19 of 784".
-    """
-    is_contiguous = ids == list(range(ids[0], ids[0] + len(ids)))
-    if is_contiguous:
-        return f"{unit} {ids[0]}-{ids[-1]} of {total}"
-    return f"{len(ids)} of {total} {unit}"
-
-
 def _statistics(array: np.ndarray) -> list[float]:
     """
     Mean, std, min, max and the fraction of exact zeros.
@@ -181,10 +104,9 @@ def _statistics(array: np.ndarray) -> list[float]:
     ]
 
 
-def _format_number(value: Any, precision: int, signed: bool = False) -> str:
+def _format_number(value: Any, precision: int) -> str:
     """
-    Integers as integers. Floats to `precision` places, never as -0.000,
-    and with a + on positive numbers if `signed`.
+    Integers as integers. Floats to `precision` places, never as -0.000.
     """
     if isinstance(value, (int, np.integer)):
         return str(value)
@@ -192,5 +114,4 @@ def _format_number(value: Any, precision: int, signed: bool = False) -> str:
     if float(f"{value:.{precision}f}") == 0:
         return f"{0:.{precision}f}"
 
-    sign = "+" if signed else ""
-    return f"{value:{sign}.{precision}f}"
+    return f"{value:.{precision}f}"

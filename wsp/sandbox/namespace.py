@@ -6,7 +6,6 @@ The namespace holds:
 
     W       dict of weight name -> numpy array (the agent edits these)
     np      numpy
-    show    show(name_or_array, rows=None, cols=None, precision=3)
     info    info() prints every tensor's shape and statistics
 """
 
@@ -37,7 +36,6 @@ class Namespace:
     def __init__(self):
         self.variables = {
             "np": np,
-            "show": self._show,
             "info": self._info,
             "W": {},
         }
@@ -103,16 +101,6 @@ class Namespace:
             value = eval(compile(last, "<cell>", "eval"), self.variables)
             if value is not None:
                 print(repr(value))
-
-    def _show(self, x, rows=None, cols=None, precision: int = 3) -> None:
-        """
-        Print a 1-D or 2-D array (or a weight, by name) with its indices.
-
-        rows and cols take any numpy index: an int, a slice, or a list of
-        ints. At most 50 rows and 30 columns are shown.
-        """
-        name, array = (x, self.weights[x]) if isinstance(x, str) else ("array", x)
-        print(views.render_array(name, array, rows, cols, precision))
 
     def _info(self) -> None:
         """

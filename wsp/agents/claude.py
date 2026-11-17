@@ -37,7 +37,7 @@ class ClaudeAgent(BaseAgent):
 
         for turn in range(1, max_turns + 1):
             response = self._send(system, messages, toolbox)
-            messages.append({"role": "assistant", "content": response.content})
+            messages.append({"role": "assistant", "content": response.content})  # type: ignore
             self._record(turn, response, log)
 
             tool_calls = [
@@ -70,7 +70,7 @@ class ClaudeAgent(BaseAgent):
                 results.append({"type": "text", "text": notice})
                 log.event("notice", turn=turn, text=notice)
 
-            messages.append({"role": "user", "content": results})
+            messages.append({"role": "user", "content": results})  # type: ignore
 
         log.event("agent_stopped", reason="max_turns", turn=max_turns)
 
@@ -96,7 +96,7 @@ class ClaudeAgent(BaseAgent):
             messages=messages,
             tools=self.tool_schemas(toolbox),
             thinking={"type": "adaptive", "display": "summarized"},
-            output_config={"effort": self.effort},
+            output_config={"effort": self.effort},  # type: ignore
             cache_control={"type": "ephemeral"},
         ) as stream:
             return stream.get_final_message()
@@ -114,7 +114,6 @@ class ClaudeAgent(BaseAgent):
 
     def _call_tool(self, call: anthropic.types.ToolUseBlock, toolbox: Toolbox) -> dict:
         result = toolbox.call(call.name, call.input)  # logged by the Toolbox
-
         return {
             "type": "tool_result",
             "tool_use_id": call.id,

@@ -19,7 +19,7 @@ from wsp.agents import BaseAgent
 from wsp.experiments import Experiment
 from wsp.log import RunLog
 from wsp.sandbox import DockerSandbox, SandboxError
-from wsp.sandbox.guide import weights_guide
+from wsp.sandbox.guide import environment_guide
 from wsp.session import Session
 from wsp.tools import Tool, Toolbox
 from wsp.tools.standard_tools import standard_tools
@@ -82,7 +82,7 @@ class RunConfig:
     tools: list[Tool] = field(default_factory=standard_tools)
     max_turns: int = 50
     max_output_chars: int = 25_000  # about 3,000 weights per tool call
-    memory_gb: float = 4  # the sandbox's memory limit
+    memory_gb: float = 8  # the sandbox's memory limit
 
 
 def run(
@@ -162,7 +162,7 @@ def run(
 
 def system_prompt(experiment: Experiment, config: RunConfig) -> str:
     """
-    The rules, the experiment, the budget, the weights as they start, and how to edit them.
+    The rules, the experiment, the budget, the weights as they start, and the sandbox.
     """
     weights = experiment.get_weights()
 
@@ -171,7 +171,7 @@ def system_prompt(experiment: Experiment, config: RunConfig) -> str:
         experiment.description(),
         budget(config),
         f"## Weights at the start\n\n{views.summarize_weights(weights)}",
-        weights_guide(weights, config.max_output_chars, config.memory_gb),
+        environment_guide(config.memory_gb),
     ]
     return "\n\n".join(section for section in sections if section)
 

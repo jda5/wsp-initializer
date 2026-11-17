@@ -57,9 +57,9 @@ def python_tool() -> Tool:
             "Run Python code to view or edit the weights. `W` is a dict of name -> "
             "numpy array; edit it by index, e.g. `W[name][3] += 0.5`. Variables are "
             "kept between calls, and the value of the last line is printed. Also "
-            "available: `np`, `show()` and `info()`. The section 'Working with the "
-            "weights' in your instructions shows how, with examples, and says what "
-            "else this environment allows."
+            "available: `np`, and `info()`, which prints every tensor's shape and "
+            "statistics. The section 'Your environment' in your instructions says "
+            "what else this environment allows."
         ),
         parameters={
             "type": "object",
