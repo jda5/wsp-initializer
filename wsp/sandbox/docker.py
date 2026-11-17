@@ -50,7 +50,7 @@ class DockerSandbox:
         name: str = "wsp-sandbox",
         timeout: float = 600.0,
         grace: float = 30.0,
-        memory: str = "4g",
+        memory: str = "8g",
         cpus: float = 2,
     ):
         """
