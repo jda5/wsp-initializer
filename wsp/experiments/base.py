@@ -67,9 +67,10 @@ class Experiment(ABC):
         """
 
     @abstractmethod
-    def metrics(self, outputs: np.ndarray, labels: np.ndarray) -> dict[str, Any]:
+    def metrics(self, split: Split) -> dict[str, Any]:
         """
-        Score model outputs. Values may be numbers or numpy arrays.
+        Run the model, with its current weights, on `split` and score it.
+        Values may be numbers or numpy arrays.
         """
 
     # -------------------------------------------------------------------------------- the model
@@ -84,10 +85,4 @@ class Experiment(ABC):
     def set_weights(self, weights: Weights) -> None:
         """
         Load weights with the same names and shapes as `get_weights` returns.
-        """
-
-    @abstractmethod
-    def predict(self, x: Inputs) -> np.ndarray:
-        """
-        The model's outputs for a batch of inputs.
         """

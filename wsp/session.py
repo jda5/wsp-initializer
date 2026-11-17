@@ -46,4 +46,4 @@ class Session:
         self.experiment.set_weights(
             weights if weights is not None else self.workspace.head
         )
-        return self.experiment.score(split)
+        return self.experiment.metrics(split)
