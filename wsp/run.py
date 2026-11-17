@@ -93,11 +93,11 @@ class RunConfig:
     How a run is set up. The same experiment can run under many configs.
     """
 
+    prompt: str
     tools: list[Tool] = field(default_factory=standard_tools)
     max_turns: int = 50
     max_output_chars: int = 25_000  # about 3,000 weights per tool call
     memory_gb: float = 4  # the sandbox's memory limit
-    prompt: str | None = None  # overrides experiment.prompt()
 
 
 def run(
@@ -119,7 +119,7 @@ def run(
     workspace = Workspace(baseline, folder / "snapshots")
 
     system = system_prompt(experiment, config)
-    prompt = config.prompt or experiment.prompt()
+    prompt = config.prompt
 
     sandbox = DockerSandbox(
         baseline,
@@ -127,8 +127,6 @@ def run(
         name=f"wsp-{folder.name}",
         memory=f"{config.memory_gb:g}g",
     )
-    for name, value in experiment.sandbox_variables().items():
-        sandbox.put(name, value)
 
     session = Session(experiment, sandbox, workspace, log)
     toolbox = Toolbox(config.tools, session, config.max_output_chars)
@@ -184,7 +182,7 @@ def system_prompt(experiment: Experiment, config: RunConfig) -> str:
     weights = experiment.get_weights()
 
     sections = [
-        experiment.rules() or PROMPT,
+        PROMPT,
         experiment.description(),
         budget(config),
         f"## Weights at the start\n\n{views.summarize_weights(weights)}",
@@ -203,7 +201,11 @@ def budget(config: RunConfig) -> str:
         "turns to finish with your report."
     )
 
-    limits = [f"- `{tool.name}`: {tool.limit:,}" for tool in config.tools if tool.limit is not None]
+    limits = [
+        f"- `{tool.name}`: {tool.limit:,}"
+        for tool in config.tools
+        if tool.limit is not None
+    ]
     if limits:
         text += "\n\nTools with a limit (`samples` counts examples, the rest count calls):\n"
         text += "\n".join(limits)

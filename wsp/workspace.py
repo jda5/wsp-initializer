@@ -4,7 +4,6 @@ Version control for weights: a baseline, a list of commits, and snapshots on dis
 
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Literal
 
 import numpy as np
 
@@ -95,19 +94,6 @@ class Workspace:
         commit = Commit(number, message, weights, path)
         self.commits.append(commit)
         return commit
-
-    def reset(self, to: Literal["last_commit", "baseline"]) -> Weights:
-        """
-        Return a copy of the weights to go back to.
-        """
-        match to:
-            case "last_commit":
-                return _copy(self.head)
-
-            case "baseline":
-                return _copy(self.baseline)
-
-        raise ValueError(f"Cannot reset to '{to}': use 'last_commit' or 'baseline'.")
 
 
 # -------------------------------------------------------------------------------- helpers

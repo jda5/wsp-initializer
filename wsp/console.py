@@ -165,12 +165,6 @@ class ConsoleView:
                 Text(f"commit #{event['number']}: {event['message']}", style="dim")
             )
 
-    def _on_reset(self, event: dict) -> None:
-        if self._shows("normal"):
-            self.console.print(
-                Text(f"reset to {event['to'].replace('_', ' ')}", style="yellow")
-            )
-
     def _on_sandbox_restarted(self, event: dict) -> None:
         self.console.print(
             Text(f"sandbox restarted: {event['reason']}", style="yellow")

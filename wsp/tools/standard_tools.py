@@ -1,17 +1,15 @@
 """
-The standard tools: python, samples, forward, evaluate, commit, reset and finish.
+The standard tools: python, samples, evaluate and finish.
 
 Each function builds a Tool. Pick the ones an experiment needs, and set
 their budgets there.
 
 Each data split has one job:
 
-    training     `samples` to look at, `forward` to run the model on them
+    training     `samples` to look at
     validation   scores only, through `evaluate`; the agent never sees an example
     test         scored once, at the end of the run
 """
-
-from typing import Literal
 
 import numpy as np
 
@@ -19,7 +17,6 @@ from wsp import views
 from wsp.sandbox import SandboxError
 from wsp.session import Session
 from wsp.tools import Budget, Tool, ToolError
-from wsp.workspace import count_changes
 
 
 def standard_tools(
@@ -27,14 +24,11 @@ def standard_tools(
     samples: int | None = 12,
 ) -> list[Tool]:
     """
-    All seven tools. `samples=None` gives the agent no training examples,
-    and so leaves out `forward` too, which runs the model on them.
+    All four tools. `samples=None` gives the agent no training examples.
     """
     tools = [
         python_tool(),
         evaluate_tool(evaluations),
-        commit_tool(),
-        reset_tool(),
         finish_tool(),
     ]
 
@@ -192,61 +186,6 @@ def _describe_inputs(x: np.ndarray | dict[str, np.ndarray]) -> str:
         return f"x is a dict of the model's inputs: {shapes}"
 
     return f"x has shape {x.shape}"
-
-
-# -------------------------------------------------------------------------------- commit and reset
-
-
-def commit_tool() -> Tool:
-    def handler(session: Session, budget: Budget, message: str) -> str:
-        budget.spend()
-        commit = session.commit(message)
-
-        changes = count_changes(session.workspace.baseline, commit.weights)
-        total = sum(changes.values())
-
-        return (
-            f"Committed as #{commit.number}. {total:,} values differ from the baseline."
-        )
-
-    return Tool(
-        name="commit",
-        description="Validate the current weights and save a snapshot you can reset to.",
-        parameters={
-            "type": "object",
-            "properties": {
-                "message": {"type": "string", "description": "What changed and why."}
-            },
-            "required": ["message"],
-        },
-        handler=handler,
-    )
-
-
-def reset_tool() -> Tool:
-    def handler(
-        session: Session, budget: Budget, to: Literal["last_commit", "baseline"]
-    ) -> str:
-        weights = session.workspace.reset(to)  # raises on an unknown `to`
-        budget.spend()
-
-        session.sandbox.set_weights(weights)
-        session.log.event("reset", to=to)
-
-        return f"W has been reset to the {to.replace('_', ' ')}."
-
-    return Tool(
-        name="reset",
-        description="Throw away uncommitted changes to W, going back to the last commit or the baseline.",
-        parameters={
-            "type": "object",
-            "properties": {
-                "to": {"type": "string", "enum": ["last_commit", "baseline"]}
-            },
-            "required": ["to"],
-        },
-        handler=handler,
-    )
 
 
 # -------------------------------------------------------------------------------- finish
