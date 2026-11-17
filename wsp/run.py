@@ -1,0 +1,230 @@
+"""
+`run` gives an experiment to an agent and records everything in a run folder:
+
+    runs/<name>-<timestamp>/
+        log.jsonl        every message, tool call and result
+        snapshots/       baseline.npz and one .npz per commit
+        summary.json     test scores before and after, budgets used
+"""
+
+import json
+from dataclasses import dataclass, field
+from datetime import datetime
+from pathlib import Path
+
+import numpy as np
+
+from wsp import views
+from wsp.agents import BaseAgent
+from wsp.experiments import Experiment
+from wsp.log import RunLog
+from wsp.sandbox import DockerSandbox, SandboxError
+from wsp.sandbox.guide import weights_guide
+from wsp.session import Session
+from wsp.tools import Tool, Toolbox
+from wsp.tools.standard_tools import standard_tools
+from wsp.workspace import Weights, Workspace, count_changes
+
+PROMPT = """\
+You are a weight-space programmer. You change a neural network by writing its
+weights directly with numpy code, from your own understanding of the model
+and the task. You never train it.
+
+## The rules
+
+These rules are the point of the experiment. We are measuring whether you can
+write good weights through reasoning alone. A score reached by breaking a rule is
+worthless to us, however high it is. An honest report of a modest score is a
+success.
+
+### 1. No training, fitting or optimisation
+
+Every weight must come from your reasoning and must be manually set.
+
+It must never come from a procedure that adjusts weights to match examples. Not allowed:
+
+- Gradient descent, or any other repeated update of weights towards a target,
+  including updates written out line by line instead of in a loop.
+- Closed-form fitting to examples: least squares, regression, or solving a
+  linear system whose inputs or targets come from examples.
+- Any other method whose job is to make the outputs match example labels.
+
+Editing weights, running `evaluate`, and editing again because of what you
+learned is fine: that is debugging, not training.
+
+### 2. Do not build your own dataset
+
+You may draw what you expect an input to look like and use that drawing
+directly as weights; that is programming. You may not generate a collection of
+synthetic examples and then fit, tune or score weights against them.
+
+### 3. Look at the data freely; measure only with `evaluate`
+
+- `samples` gives you a few examples from the training data. Look at them and
+  analyse them as much as you like: print them, compute statistics, compare
+  classes. Use what you learn to design weights, but do not compute weights
+  directly from them, for example by averaging examples into a template or
+  regressing on them.
+- `forward` runs the model, with your current weights, on samples you have
+  drawn, and shows every layer's activations. Use it to see how your weights
+  respond to real inputs and to understand mistakes ("why is this one wrong?").
+- `evaluate` is your only measure of success. It scores the validation data,
+  which you never see directly. Choose between designs with `evaluate`, not
+  by counting how many of your samples you get right. Its budget is limited,
+  but evaluations you do not use are wasted.
+
+### 4. Use only what you are given
+
+No outside data, no pretrained or remembered weights, and no attempts to get
+around the sandbox's limits. Remember, following the rules of the experiment is more valuable
+than achieving a high score by breaking them.
+
+### 5. When unsure, do not
+
+If you are not sure whether something counts as training, fitting or tuning,
+do not do it. Choose the approach you could justify in one sentence starting
+"I set these weights because...".
+""".strip()
+
+
+@dataclass
+class RunConfig:
+    """
+    How a run is set up. The same experiment can run under many configs.
+    """
+
+    tools: list[Tool] = field(default_factory=standard_tools)
+    max_turns: int = 50
+    max_output_chars: int = 25_000  # about 3,000 weights per tool call
+    memory_gb: float = 4  # the sandbox's memory limit
+    prompt: str | None = None  # overrides experiment.prompt()
+
+
+def run(
+    experiment: Experiment,
+    agent: BaseAgent,
+    config: RunConfig | None = None,
+    root: str | Path = "runs",
+) -> Path:
+    """
+    Run `agent` on `experiment` and return the run folder.
+    """
+    config = config or RunConfig()
+
+    folder = Path(root) / f"{experiment.name}-{datetime.now():%Y%m%d-%H%M%S}"
+    log = RunLog(folder / "log.jsonl")
+    print(f"Logging to {log.path}. Watch it with: uv run python -m wsp.watch --follow")
+
+    baseline = experiment.get_weights()
+    workspace = Workspace(baseline, folder / "snapshots")
+
+    system = system_prompt(experiment, config)
+    prompt = config.prompt or experiment.prompt()
+
+    sandbox = DockerSandbox(
+        baseline,
+        folder / "sandbox",
+        name=f"wsp-{folder.name}",
+        memory=f"{config.memory_gb:g}g",
+    )
+    for name, value in experiment.sandbox_variables().items():
+        sandbox.put(name, value)
+
+    session = Session(experiment, sandbox, workspace, log)
+    toolbox = Toolbox(config.tools, session, config.max_output_chars)
+
+    log.event(
+        "start",
+        experiment=experiment.name,
+        agent=agent.name,
+        system=system,
+        prompt=prompt,
+    )
+
+    try:
+        baseline_scores = session.score(experiment.test(), baseline)
+
+        agent.run(system, prompt, toolbox, log, config.max_turns)
+
+        final = _final_weights(session)
+        final_scores = session.score(experiment.test(), final)
+    finally:
+        sandbox.close()
+
+    changes = count_changes(baseline, final)
+
+    summary = {
+        "experiment": experiment.name,
+        "agent": agent.name,
+        "test_before": baseline_scores,
+        "test_after": final_scores,
+        "values_changed": sum(changes.values()),
+        "values_total": sum(array.size for array in baseline.values()),
+        "changes_by_tensor": changes,
+        "commits": len(workspace.commits),
+        "tool_usage": toolbox.usage(),
+        "finished": session.finished,  # False if the run hit max_turns or was stopped
+        "report": session.report,
+    }
+
+    log.event("end", **summary)
+    (folder / "summary.json").write_text(
+        json.dumps(summary, indent=2, default=_to_list)
+    )
+
+    print(f"\nRun saved to {folder}")
+
+    return folder
+
+
+def system_prompt(experiment: Experiment, config: RunConfig) -> str:
+    """
+    The rules, the experiment, the budget, the weights as they start, and how to edit them.
+    """
+    weights = experiment.get_weights()
+
+    sections = [
+        experiment.rules() or PROMPT,
+        experiment.description(),
+        budget(config),
+        f"## Weights at the start\n\n{views.summarize_weights(weights)}",
+        weights_guide(weights, config.max_output_chars, config.memory_gb),
+    ]
+    return "\n\n".join(section for section in sections if section)
+
+
+def budget(config: RunConfig) -> str:
+    """
+    How many turns the agent has, and how far each limited tool goes.
+    """
+    text = (
+        f"## Your budget\n\nYou have {config.max_turns} turns. A turn is one of your "
+        "replies, however many tools it calls. Plan your work to fit, and leave a few "
+        "turns to finish with your report."
+    )
+
+    limits = [f"- `{tool.name}`: {tool.limit:,}" for tool in config.tools if tool.limit is not None]
+    if limits:
+        text += "\n\nTools with a limit (`samples` counts examples, the rest count calls):\n"
+        text += "\n".join(limits)
+
+    return text
+
+
+# -------------------------------------------------------------------------------- private
+
+
+def _final_weights(session: Session) -> Weights:
+    """
+    Commit whatever is in W. If it is invalid, or the sandbox has stopped,
+    fall back to the last commit.
+    """
+    try:
+        return session.commit("final").weights
+    except (ValueError, SandboxError) as error:  # InvalidWeights is a ValueError
+        session.log.event("final_weights_invalid", error=str(error))
+        return session.workspace.head
+
+
+def _to_list(value: np.ndarray):
+    return value.tolist()
