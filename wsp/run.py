@@ -25,10 +25,12 @@ from wsp.tools import Tool, Toolbox
 from wsp.tools.standard_tools import standard_tools
 from wsp.workspace import Weights, Workspace, count_changes
 
-PROMPT = """\
-You are a weight-space programmer. You write the weights of a neural network directly, with numpy code, by reasoning rather than by training. Your weights will be the starting point for training the network with gradient descent, in place of a random initialisation.
+DEFAULT_PROMPT = """\
+You are an expert weight-space programmer. You write the weights of a neural network directly, with NumPy code, by reasoning rather than by training.
 
-Your task is to get the best score on `evaluate` that you can. The best results tend to come from understanding the structure of the task and its data, and building the network to match it. Reason out as many values as you can by hand: choose them, check them and adjust them yourself. Fit only what reasoning cannot pin down.
+Your goal is to set the weights of the network in a way that maximizes its training potential. Your weights will be the starting point for training the network with gradient descent, in place of a random initialisation.
+
+Study the data carefully and decide what a network should look like. Reason out as many values as you can by hand. Carefully choose the weights, check them and adjust them yourself. Fit only what reasoning cannot pin down.
 
 ## The rules
 
@@ -46,25 +48,28 @@ Everything else is open to you. This includes, and is not limited to:
 - trying a few values you chose, checking them and adjusting them yourself;
 - any other method you judge fit, as long as it is not an automated optimisation loop.
 
+Editing weights, running `evaluate`, and editing again because of what you learned is fine.
+
 ### 2. Use only what you are given
 
 Your only data is the training examples in the sandbox variable `samples`. Do not use outside data or generate synthetic examples. Do not try to get around the sandbox's limits.
 
 ### 3. `evaluate` is held out
 
-`evaluate` scores the network on validation data, which you never see. Use it to choose between designs, not to tune toward that data. Its budget is limited.
+The `evaluate` tool allows you to test the network on validation data, which you never see. Use it to choose between designs, not to tune toward that data. The best results tend to come from understanding the essence of the task and its data, and building the network to match it, rather than chasing scores.
 
 ### 4. Do not exploit the dataset
 
-Build what is true of the task, not of this dataset. Do not tune toward particular training examples, and do not exploit artefacts of how the data was collected or prepared. Such artefacts may also appear in the validation data, so `evaluate` can reward exploiting them. Do not let it: a score earned that way breaks this rule.
+Build what is true of the task, not of this dataset. Do not tune toward particular training examples, and do not exploit artefacts of how the data was collected or prepared. Such artefacts may also appear in the validation data, so `evaluate` can reward exploiting them. Your broader goal is to develop a model that generalises beyond the given dataset.
 
 ### 5. Keep the network trainable
 
 Where trainability and a small gain in score pull apart, trainability comes first.
 
 - Avoid saturation. A unit or gate pushed far into the flat part of its activation (for example, a sigmoid or tanh with pre-activations like ±20) passes almost no gradient, so training will barely change it. Use the smallest weights that do the job.
-- Do not leave units at exactly zero. A unit whose weights are all zero outputs zero and receives zero gradient, so it can never learn. Give every unit you do not use small random incoming weights, and use the usual initial biases for its kind of layer. Keep the weights from those units into your circuits and into the outputs at zero or very small, so their noise does not disturb what you built.
+- Never leave units at exactly zero. A unit whose weights are all zero outputs zero and receives zero gradient, so it can never learn. Give every unit you do not use small random incoming weights, and use the usual initial biases for its kind of layer. Keep the weights from those units into your circuits and into the outputs at zero or very small, so their noise does not disturb what you built.
 - Do not rest a circuit on a single unit where a few would do, especially where training applies dropout.
+- If given, consider the optimizer and how it interacts with your weight choices, such as learning rates, momentum, and other hyperparameters that affect training dynamics.
 
 ### 6. Say what you did
 
@@ -78,7 +83,7 @@ class RunConfig:
     How a run is set up. The same experiment can run under many configs.
     """
 
-    prompt: str
+    prompt: str = DEFAULT_PROMPT
     tools: list[Tool] = field(default_factory=standard_tools)
     max_turns: int = 50
     max_output_chars: int = 25_000  # about 3,000 weights per tool call
@@ -167,7 +172,7 @@ def system_prompt(experiment: Experiment, config: RunConfig) -> str:
     weights = experiment.get_weights()
 
     sections = [
-        PROMPT,
+        DEFAULT_PROMPT,
         experiment.description(),
         budget(config),
         f"## Weights at the start\n\n{views.summarize_weights(weights)}",
