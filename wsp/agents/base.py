@@ -13,8 +13,7 @@ class BaseAgent(ABC):
         self, system: str, prompt: str, toolbox: Toolbox, log: RunLog, max_turns: int
     ) -> None:
         """
-        Work until the agent calls `finish`, stops calling tools, or
-        ``max_turns`` is reached.
+        Work until the agent calls `finish`, stops calling tools, or `max_turns` is reached.
         """
 
     @abstractmethod
