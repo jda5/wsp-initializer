@@ -40,7 +40,6 @@ def standard_tools(
 
     if samples is not None:
         tools.append(samples_tool(samples))
-        tools.append(forward_tool())
 
     return tools
 
@@ -122,67 +121,6 @@ def evaluate_tool(limit: int = 10) -> Tool:
     )
 
 
-# -------------------------------------------------------------------------------- forward
-
-
-def forward_tool() -> Tool:
-    def handler(session: Session, budget: Budget, indices: list[int] | None = None) -> str:
-        drawn = session.sample_indices
-        if not drawn:
-            raise ToolError("There are no samples yet: draw some with `samples` first.")
-
-        positions = list(range(len(drawn))) if indices is None else [int(i) for i in indices]
-        if not positions or min(positions) < 0 or max(positions) >= len(drawn):
-            raise ToolError(f"Indices must be positions in `samples`, 0 to {len(drawn) - 1}.")
-
-        weights = session.current_weights()
-        budget.spend()
-
-        examples = session.experiment.train().take([drawn[i] for i in positions])
-
-        session.experiment.set_weights(weights)
-        activations = session.experiment.activations(examples.x)
-
-        session.sandbox.put(
-            "forward_result",
-            {"indices": np.array(positions), "labels": examples.y, "activations": activations},
-        )
-        session.log.event("forward", indices=positions)
-
-        summary = session.experiment.forward_summary(positions, examples, activations)
-
-        shapes = ", ".join(f"{name} {array.shape}" for name, array in activations.items())
-        return (
-            f"{summary}\n\n"
-            "Every layer's activations are in the sandbox variable `forward_result` "
-            f"(keys: indices, labels, activations). Shapes: {shapes}."
-        )
-
-    return Tool(
-        name="forward",
-        description=(
-            "Run the model, with your current (uncommitted) weights, on training examples "
-            "you have drawn with `samples`. Prints the output layer and stores every "
-            "layer's activations in the sandbox as `forward_result`. Use it to see how "
-            "your weights respond to real inputs and to understand mistakes."
-        ),
-        parameters={
-            "type": "object",
-            "properties": {
-                "indices": {
-                    "type": "array",
-                    "items": {"type": "integer"},
-                    "description": (
-                        "Positions in `samples` (0 is the first example you drew). "
-                        "Leave out to run all of them."
-                    ),
-                }
-            },
-        },
-        handler=handler,
-    )
-
-
 # -------------------------------------------------------------------------------- samples
 
 # Samples are drawn in one fixed random order, so every run sees the same ones.
@@ -205,7 +143,9 @@ def samples_tool(limit: int = 12) -> Tool:
         examples = split.take(drawn)
 
         session.sample_indices = drawn.tolist()
-        session.sandbox.put("samples", {"indices": drawn, "x": examples.x, "y": examples.y})
+        session.sandbox.put(
+            "samples", {"indices": drawn, "x": examples.x, "y": examples.y}
+        )
         session.log.event("samples", indices=new)
 
         # List the labels only when there is one per example, not one per step.
@@ -328,8 +268,7 @@ def finish_tool() -> Tool:
         description=(
             "End the run. Your final weights are whatever is in W when you call this. "
             "Pass your report: what you changed and why, what you observed, how you "
-            "used `samples` and `forward`, and whether anything you did came close "
-            "to breaking a rule."
+            "used `samples`, and whether anything you did came close to breaking a rule."
         ),
         parameters={
             "type": "object",
