@@ -11,6 +11,7 @@ import json
 from dataclasses import dataclass, field
 from datetime import datetime
 from pathlib import Path
+from typing import Any
 
 import numpy as np
 
@@ -73,6 +74,12 @@ Build what is true of the task, not of this dataset. Do not tune toward particul
 Say which numbers you reasoned out and why, which you fitted and to what, and how your choices follow from the structure of the network and the data. Flag anything that came close to a rule, and any trade-off you made between score and trainability.
 """.strip()
 
+# The agent's first message. The task, the rules and the sandbox are all in the system prompt.
+FIRST_MESSAGE = (
+    "Write the network's starting weights. The task, the rules and what is in "
+    "your sandbox are described in your instructions."
+)
+
 
 @dataclass
 class RunConfig:
@@ -80,7 +87,8 @@ class RunConfig:
     How a run is set up. The same experiment can run under many configs.
     """
 
-    prompt: str = DEFAULT_PROMPT
+    prompt: str = DEFAULT_PROMPT  # opens the system prompt
+    first_message: str = FIRST_MESSAGE
     tools: list[Tool] = field(default_factory=standard_tools)
     max_turns: int = 50
     max_output_chars: int = 25_000  # about 3,000 weights per tool call
@@ -105,8 +113,11 @@ def run(
     baseline = experiment.get_weights()
     workspace = Workspace(baseline, folder / "snapshots")
 
-    system = system_prompt(experiment, config)
-    prompt = config.prompt
+    # Placed in the sandbox, and described to the agent, from this one dict.
+    variables = experiment.sandbox_variables()
+
+    system = system_prompt(experiment, config, variables)
+    prompt = config.first_message
 
     sandbox = DockerSandbox(
         baseline,
@@ -127,6 +138,9 @@ def run(
     )
 
     try:
+        for name, value in variables.items():
+            sandbox.put(name, value)
+
         baseline_scores = session.score(experiment.test(), baseline)
 
         agent.run(system, prompt, toolbox, log, config.max_turns)
@@ -162,18 +176,21 @@ def run(
     return folder
 
 
-def system_prompt(experiment: Experiment, config: RunConfig) -> str:
+def system_prompt(
+    experiment: Experiment, config: RunConfig, variables: dict[str, Any]
+) -> str:
     """
-    The rules, the experiment, the budget, the weights as they start, and the sandbox.
+    The rules, the experiment, the budget, the weights as they start, and the
+    sandbox, including the `variables` placed in it.
     """
     weights = experiment.get_weights()
 
     sections = [
-        DEFAULT_PROMPT,
+        config.prompt,
         experiment.description(),
         budget(config),
         f"## Weights at the start\n\n{views.summarize_weights(weights)}",
-        environment_guide(config.memory_gb),
+        environment_guide(variables, config.memory_gb),
     ]
     return "\n\n".join(section for section in sections if section)
 
