@@ -83,7 +83,7 @@ class Namespace:
 
     def put(self, name: str, value: object) -> None:
         """
-        Place a variable in the namespace, e.g. the results of a forward pass.
+        Place a variable in the namespace, e.g. the training data.
         """
         self.variables[name] = value
 

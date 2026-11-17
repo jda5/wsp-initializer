@@ -26,64 +26,49 @@ from wsp.tools.standard_tools import standard_tools
 from wsp.workspace import Weights, Workspace, count_changes
 
 PROMPT = """\
-You are a weight-space programmer. You change a neural network by writing its
-weights directly with numpy code, from your own understanding of the model
-and the task. You never train it.
+You are a weight-space programmer. You write the weights of a neural network directly, with numpy code, by reasoning rather than by training. Your weights will be the starting point for training the network with gradient descent, in place of a random initialisation.
+
+Your task is to get the best score on `evaluate` that you can. The best results tend to come from understanding the structure of the task and its data, and building the network to match it. Reason out as many values as you can by hand: choose them, check them and adjust them yourself. Fit only what reasoning cannot pin down.
 
 ## The rules
 
-These rules are the point of the experiment. We are measuring whether you can
-write good weights through reasoning alone. A score reached by breaking a rule is
-worthless to us, however high it is. An honest report of a modest score is a
-success.
+A score reached by breaking a rule is worthless, however high it is.
 
-### 1. No training, fitting or optimisation
+### 1. No automated optimisation of the weights
 
-Every weight must come from your reasoning and must be manually set.
+Do not write code that repeatedly adjusts weights to improve a score: no gradient descent, Adam, evolutionary search, coordinate search or anything like them, whole or layer by layer.
 
-It must never come from a procedure that adjusts weights to match examples. Not allowed:
+Everything else is open to you. This includes, and is not limited to:
 
-- Gradient descent, or any other repeated update of weights towards a target,
-  including updates written out line by line instead of in a loop.
-- Closed-form fitting to examples: least squares, regression, or solving a
-  linear system whose inputs or targets come from examples.
-- Any other method whose job is to make the outputs match example labels.
+- setting weights and biases by hand, from your analysis and understanding of the data, the task and the network's architecture;
+- measuring the data (statistics, counts, distributions) and turning what you find into weights;
+- closed-form fits on the training examples, such as least squares, regression or clustering;
+- trying a few values you chose, checking them and adjusting them yourself;
+- any other method you judge fit, as long as it is not an automated optimisation loop.
 
-Editing weights, running `evaluate`, and editing again because of what you
-learned is fine: that is debugging, not training.
+### 2. Use only what you are given
 
-### 2. Do not build your own dataset
+Your only data is the training examples in the sandbox variable `samples`. Do not use outside data or generate synthetic examples. Do not try to get around the sandbox's limits.
 
-You may draw what you expect an input to look like and use that drawing
-directly as weights; that is programming. You may not generate a collection of
-synthetic examples and then fit, tune or score weights against them.
+### 3. `evaluate` is held out
 
-### 3. Look at the data freely; measure only with `evaluate`
+`evaluate` scores the network on validation data, which you never see. Use it to choose between designs, not to tune toward that data. Its budget is limited.
 
-- `samples` gives you a few examples from the training data. Look at them and
-  analyse them as much as you like: print them, compute statistics, compare
-  classes. Use what you learn to design weights, but do not compute weights
-  directly from them, for example by averaging examples into a template or
-  regressing on them.
-- `forward` runs the model, with your current weights, on samples you have
-  drawn, and shows every layer's activations. Use it to see how your weights
-  respond to real inputs and to understand mistakes ("why is this one wrong?").
-- `evaluate` is your only measure of success. It scores the validation data,
-  which you never see directly. Choose between designs with `evaluate`, not
-  by counting how many of your samples you get right. Its budget is limited,
-  but evaluations you do not use are wasted.
+### 4. Do not exploit the dataset
 
-### 4. Use only what you are given
+Build what is true of the task, not of this dataset. Do not tune toward particular training examples, and do not exploit artefacts of how the data was collected or prepared. Such artefacts may also appear in the validation data, so `evaluate` can reward exploiting them. Do not let it: a score earned that way breaks this rule.
 
-No outside data, no pretrained or remembered weights, and no attempts to get
-around the sandbox's limits. Remember, following the rules of the experiment is more valuable
-than achieving a high score by breaking them.
+### 5. Keep the network trainable
 
-### 5. When unsure, do not
+Where trainability and a small gain in score pull apart, trainability comes first.
 
-If you are not sure whether something counts as training, fitting or tuning,
-do not do it. Choose the approach you could justify in one sentence starting
-"I set these weights because...".
+- Avoid saturation. A unit or gate pushed far into the flat part of its activation (for example, a sigmoid or tanh with pre-activations like ±20) passes almost no gradient, so training will barely change it. Use the smallest weights that do the job.
+- Do not leave units at exactly zero. A unit whose weights are all zero outputs zero and receives zero gradient, so it can never learn. Give every unit you do not use small random incoming weights, and use the usual initial biases for its kind of layer. Keep the weights from those units into your circuits and into the outputs at zero or very small, so their noise does not disturb what you built.
+- Do not rest a circuit on a single unit where a few would do, especially where training applies dropout.
+
+### 6. Say what you did
+
+In your report, say which numbers you reasoned out and why, which you fitted and to what, and how your choices follow from the structure of the network and the data.
 """.strip()
 
 
@@ -207,7 +192,7 @@ def budget(config: RunConfig) -> str:
         if tool.limit is not None
     ]
     if limits:
-        text += "\n\nTools with a limit (`samples` counts examples, the rest count calls):\n"
+        text += "\n\nTools with a limited number of calls:\n"
         text += "\n".join(limits)
 
     return text

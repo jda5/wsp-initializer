@@ -45,7 +45,7 @@ def receive(stream: IO[str]) -> dict[str, Any] | None:
 
 def save_tree(path: str | Path | IO[bytes], tree: dict) -> None:
     """
-    Save a dict whose leaves are arrays or numbers, e.g. forward_result.
+    Save a dict whose leaves are arrays or numbers, e.g. samples.
 
     Writes the .npz file directly rather than with np.savez(path, **arrays):
     that passes arrays as keyword arguments, so one named "file" or

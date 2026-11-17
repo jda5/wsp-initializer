@@ -21,17 +21,6 @@ class Split:
     def __len__(self) -> int:
         return len(self.y)
 
-    def take(self, rows: Any) -> Split:
-        """
-        The examples at `rows`, as a smaller Split.
-        """
-        if isinstance(self.x, dict):
-            x = {name: array[rows] for name, array in self.x.items()}
-        else:
-            x = self.x[rows]
-
-        return Split(x, self.y[rows])
-
 
 class Experiment(ABC):
     name: str
@@ -45,6 +34,17 @@ class Experiment(ABC):
 
         This becomes the body of the system prompt.
         """
+
+    def sandbox_variables(self) -> dict[str, Any]:
+        """
+        Variables placed in the agent's sandbox at the start of a run. Values
+        are arrays, numbers, or dicts of them.
+
+        By default, the whole training split as `samples` (keys: x, y). Add
+        more, e.g. a vocabulary, with `{**super().sandbox_variables(), ...}`.
+        """
+        train = self.train()
+        return {"samples": {"x": train.x, "y": train.y}}
 
     # -------------------------------------------------------------------------------- the data
 
@@ -90,10 +90,4 @@ class Experiment(ABC):
     def predict(self, x: Inputs) -> np.ndarray:
         """
         The model's outputs for a batch of inputs.
-        """
-
-    @abstractmethod
-    def activations(self, x: Inputs) -> dict[str, np.ndarray]:
-        """
-        Every layer's output for a batch of inputs, keyed by layer name.
         """

@@ -6,7 +6,7 @@ shows the ones that matter at its level.
 
     quiet     evaluations, notices, the report and the final test scores
     normal    + the agent's messages, every tool call, and output previews
-    verbose   + thinking, full outputs, samples, commits and token usage
+    verbose   + thinking, full outputs, commits and token usage
 
 The same view replays or follows a log file: python -m wsp.watch <run folder>.
 """
@@ -147,18 +147,6 @@ class ConsoleView:
         if self._shows("verbose"):
             self.console.print(views.render_scores(scores))
 
-    def _on_samples(self, event: dict) -> None:
-        if self._shows("verbose"):
-            self.console.print(
-                Text(f"samples drawn: {_short_list(event['indices'])}", style="dim")
-            )
-
-    def _on_forward(self, event: dict) -> None:
-        if self._shows("verbose"):
-            self.console.print(
-                Text(f"forward on: {_short_list(event['indices'])}", style="dim")
-            )
-
     def _on_commit(self, event: dict) -> None:
         if self._shows("verbose"):
             self.console.print(
@@ -214,8 +202,3 @@ def _scalars(scores: dict) -> str:
         "  ".join(f"{name} {value:.4f}" for name, value in numbers.items())
         or "(no scalar metrics)"
     )
-
-
-def _short_list(values: list, limit: int = 12) -> str:
-    shown = ", ".join(str(v) for v in values[:limit])
-    return shown + (f", … ({len(values)} in all)" if len(values) > limit else "")
