@@ -28,6 +28,7 @@ EMBEDDING_DIM = 128
 UNITS = 512
 DROPOUT = 0.3
 LEARNING_RATE = 2e-3  # Adam, with Keras's other defaults
+WARMUP_EPOCHS = 1  # the learning rate rises linearly from 0 to LEARNING_RATE over these
 CLIPNORM = 1.0
 BATCH_SIZE = 64
 EPOCHS = 50  # at most; training stops early when the held-out loss stops improving
@@ -68,6 +69,7 @@ class ShakespeareExperiment(KerasExperiment):
         V = len(self.vocab)
         E = self.model.get_layer("embedding").output_dim
         H = self.model.get_layer("lstm_layer_1").units
+        warmup = "epoch" if WARMUP_EPOCHS == 1 else f"{WARMUP_EPOCHS} epochs"
 
         return f"""\
 ## Data
@@ -140,8 +142,10 @@ of h is set to zero with probability {self.dropout}, and the rest are divided by
 
 After you finish, the network is trained from your weights:
 
-- Adam with learning rate {LEARNING_RATE} (Keras's other defaults). Each weight's gradient
-  is clipped to a norm of at most {CLIPNORM}.
+- Adam (Keras's defaults apart from the learning rate). The learning rate warms
+  up: it rises linearly from 0 to {LEARNING_RATE} over the first {warmup}
+  ({WARMUP_EPOCHS * len(self.train()) // BATCH_SIZE} steps), then stays at {LEARNING_RATE}.
+- Each weight's gradient is clipped to a norm of at most {CLIPNORM}.
 - The loss is the cross-entropy of the next character, from the logits.
 - Batches of {BATCH_SIZE} passages, shuffled every epoch.
 - Up to {EPOCHS} epochs, stopping once the loss on held-out text has not improved
