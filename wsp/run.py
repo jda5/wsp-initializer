@@ -50,9 +50,9 @@ Everything else is open to you, including:
 - closed-form fits on the training examples, such as least squares or regression;
 - trying a few values you chose yourself and checking them.
 
-### 2. Use only what you are given
+### 2. Use only the data you are given
 
-Your only data is the training examples in the sandbox variable `samples`. Do not use outside data or generate synthetic examples. Do not try to get around the sandbox's limits.
+Your only data is the training examples in the sandbox variable `samples`. Your own knowledge is yours to use: how the language works, what the task needs, how networks train. What you may not bring in is outside data: other datasets, statistics you remember from them, pretrained or remembered weights, or synthetic examples you generate. Do not try to get around the sandbox's limits.
 
 ### 3. Check designs with `evaluate`; do not tune with it
 
